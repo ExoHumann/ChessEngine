@@ -1,0 +1,135 @@
+
+    .   _/|
+    .  // o\
+    .  || ._)  lichess-bot 1.2.0
+    .  //__\
+    .  )___(   Play on Lichess with a bot
+    
+Config:
+token: logger
+url: https://lichess.org/
+engine:
+  dir: MyEngines
+  name: ScoreEngine
+  working_dir: ''
+  protocol: uci
+  ponder: true
+  polyglot:
+    enabled: false
+    book:
+      standard:
+      - engines/book1.bin
+      - engines/book2.bin
+    min_weight: 1
+    selection: weighted_random
+    max_depth: 8
+  draw_or_resign:
+    resign_enabled: false
+    resign_score: -1000
+    resign_for_egtb_minus_two: true
+    resign_moves: 3
+    offer_draw_enabled: false
+    offer_draw_score: 0
+    offer_draw_for_egtb_zero: true
+    offer_draw_moves: 5
+    offer_draw_pieces: 10
+  online_moves:
+    max_out_of_book_moves: 10
+    chessdb_book:
+      enabled: false
+      min_time: 20
+      move_quality: good
+      min_depth: 20
+      contribute: true
+    lichess_cloud_analysis:
+      enabled: false
+      min_time: 20
+      move_quality: good
+      max_score_difference: 50
+      min_depth: 20
+      min_knodes: 0
+    online_egtb:
+      enabled: false
+      min_time: 20
+      max_pieces: 7
+      source: lichess
+      move_quality: best
+  lichess_bot_tbs:
+    syzygy:
+      enabled: false
+      paths:
+      - engines/syzygy
+      max_pieces: 7
+      move_quality: best
+    gaviota:
+      enabled: false
+      paths:
+      - engines/gaviota
+      max_pieces: 5
+      min_dtm_to_consider_as_wdl_1: 120
+      move_quality: best
+  homemade_options: null
+  uci_options:
+    Move Overhead: 100
+    Threads: 2
+  silence_stderr: false
+abort_time: 20
+fake_think_time: false
+rate_limiting_delay: 0
+move_overhead: 2000
+correspondence:
+  move_time: 60
+  checkin_period: 600
+  disconnect_time: 300
+  ponder: false
+challenge:
+  concurrency: 1
+  sort_by: best
+  accept_bot: false
+  only_bot: false
+  max_increment: 180
+  min_increment: 0
+  max_base: 315360000
+  min_base: 0
+  variants:
+  - standard
+  time_controls:
+  - bullet
+  - blitz
+  - rapid
+  modes:
+  - casual
+  - rated
+greeting:
+  hello: Hi! I'm {me}. Good luck! Type !help for a list of commands I can respond
+    to.
+  goodbye: Good game!
+  hello_spectators: Hi! I'm {me}. Type !help for a list of commands I can respond
+    to.
+  goodbye_spectators: Thanks for watching!
+matchmaking:
+  allow_matchmaking: false
+  challenge_variant: random
+  challenge_timeout: 30
+  challenge_initial_time:
+  - 60
+  - 120
+  challenge_increment:
+  - 1
+  - 2
+  opponent_rating_difference: 100
+  opponent_allow_tos_violation: true
+  challenge_mode: random
+  delay_after_decline: none
+
+Quitting lichess-bot due to an error:
+Traceback (most recent call last):
+  File "C:\Users\KrzyS\PycharmProjects\ChessGame\lichess-bot.py", line 1158, in <module>
+    start_lichess_bot()
+  File "C:\Users\KrzyS\PycharmProjects\ChessGame\lichess-bot.py", line 1139, in start_lichess_bot
+    CONFIG = load_config(args.config or "./config.yml")
+  File "C:\Users\KrzyS\PycharmProjects\ChessGame\config.py", line 56, in load_config
+    config_assert(os.path.isfile(engine) or CONFIG["engine"]["protocol"] == "homemade",
+  File "C:\Users\KrzyS\PycharmProjects\ChessGame\config.py", line 11, in config_assert
+    raise Exception(error_message)
+Exception: The engine MyEngines\ScoreEngine file does not exist.
