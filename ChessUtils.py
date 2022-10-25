@@ -10,7 +10,8 @@ def play_game(board, white_player, black_player, display, last_move=None):
         move = player.play(board)
         print(player.name + " is taking a trun")
         board.push(move)
-        display(board)
+        text_display(board)
+        #display(board)
     return board
 
 

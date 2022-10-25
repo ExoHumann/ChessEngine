@@ -11,6 +11,18 @@ PIECE_VALUES = {
 }
 
 
+def evaluate_count(new_board, turn):
+    # count material in the new position
+    all_pieces = new_board.piece_map().values()
+    material_diff = 0
+    for piece in all_pieces:
+        value = PIECE_VALUES[piece.symbol().upper()]
+        if piece.color == turn:
+            material_diff += value
+        else:
+            material_diff -= value
+
+
 def material_count(new_board, turn):
     # count material in the new position
     all_pieces = new_board.piece_map().values()
