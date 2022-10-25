@@ -1,5 +1,6 @@
 import chess
 import chess.svg
+from IPython.core.display import SVG
 
 
 def play_game(board, white_player, black_player, display, last_move=None):
@@ -10,20 +11,19 @@ def play_game(board, white_player, black_player, display, last_move=None):
         move = player.play(board)
         print(player.name + " is taking a trun")
         board.push(move)
-        text_display(board)
-        #display(board)
+        display(board)
     return board
 
 
-def text_display(board, last_move):
-    print("\n-------")
-    print(board)
-    print("-------\n")
+def text_display(board):
+    print("\n-----------------")
+    print(board.unicode())
+    print("-----------------\n")
 
 
 def svg_display(board):
     move = board.peek() if len(board.move_stack) else None
-    display(chess.svg.board(board, lastmove=move, size=300))
+    SVG(chess.svg.board(board, lastmove=move, size=300))
 
 
 def position_features(board):

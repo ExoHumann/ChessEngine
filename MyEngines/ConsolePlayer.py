@@ -1,4 +1,7 @@
+from time import sleep
+
 import chess
+import sys
 
 
 class ConsolePlayer(object):

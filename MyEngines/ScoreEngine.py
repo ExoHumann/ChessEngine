@@ -2,12 +2,12 @@ import chess
 import time
 
 PIECE_VALUES = {
-    'K': 0,
-    'Q': 9,
-    'R': 5,
-    'B': 3,
-    'N': 3,
-    'P': 1
+    'K': 10000,
+    'Q': 900,
+    'R': 500,
+    'B': 300,
+    'N': 300,
+    'P': 100
 }
 
 
@@ -17,6 +17,10 @@ def evaluate_count(new_board, turn):
     material_diff = 0
     for piece in all_pieces:
         value = PIECE_VALUES[piece.symbol().upper()]
+
+        if piece.symbol().upper() == "Q":
+            value += 1 * new_board.legal_moves.count()
+
         if piece.color == turn:
             material_diff += value
         else:
@@ -47,10 +51,12 @@ def improved_score(new_board, turn):
     # Compute space controlled by current color
     space = 0
     for square in chess.SQUARES:
-        if new_board.is_attacked_by(turn, square):
-            space += 1
-        if new_board.is_attacked_by(not turn, square):
-            space -= 1
+        piece = new_board.piece_at(square)
+        if piece != None:
+            if new_board.is_attacked_by(turn, square):
+                space += 1 * PIECE_VALUES[piece.symbol().upper()]
+            if new_board.is_attacked_by(not turn, square):
+                space -= 1 * PIECE_VALUES[piece.symbol().upper()]
 
     score += space * 1 / 32
 
@@ -66,8 +72,8 @@ def minimax_score(board, turn, cutoff=999999999, current_depth=0, max_depth=2, c
     global cache_hits, num_pruned, positions
     positions += 1
 
-    if current_depth == max_depth or board.outcome():
-        return material_count(board, turn)
+    if current_depth == max_depth or board.is_game_over():  # board.outcome():
+        return improved_score(board, turn)
 
     # recursively calculate best move
     # Make a list of all legal moves

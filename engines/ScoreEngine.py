@@ -55,7 +55,7 @@ def improved_score(new_board, turn):
             if attack_count > defender_count:
                 score -= PIECE_VALUES[piece.symbol().upper()]
 
-    return space
+    return score
 
 
 class ScoreEngine(MinimalEngine):
