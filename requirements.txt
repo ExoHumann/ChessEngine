@@ -7,5 +7,3 @@ rich==12.5.1
 # Requirements for tests
 pytest~=7.0.1
 pytest-timeout==2.1.0
-
-ipython~=7.16.3

@@ -23,7 +23,7 @@ def text_display(board):
 
 def svg_display(board):
     move = board.peek() if len(board.move_stack) else None
-    SVG(chess.svg.board(board, lastmove=move, size=300))
+    display(chess.svg.board(board, lastmove=move, size=300))
 
 
 def position_features(board):

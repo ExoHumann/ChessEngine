@@ -1,39 +1,40 @@
+from collections import namedtuple
+
 import chess
 import time
 
 PIECE_VALUES = {
-    'K': 10000,
-    'Q': 900,
-    'R': 500,
-    'B': 300,
-    'N': 300,
-    'P': 100
+    chess.KING: 10000,
+    chess.QUEEN: 900,
+    chess.ROOK: 500,
+    chess.BISHOP: 300,
+    chess.KNIGHT: 300,
+    chess.PAWN: 100
 }
 
 
-def evaluate_count(new_board, turn):
+def evaluate_count(new_board):
     # count material in the new position
     all_pieces = new_board.piece_map().values()
+
     material_diff = 0
+
     for piece in all_pieces:
-        value = PIECE_VALUES[piece.symbol().upper()]
+        value = PIECE_VALUES[piece.piece_type]
 
-        if piece.symbol().upper() == "Q":
-            value += 1 * new_board.legal_moves.count()
-
-        if piece.color == turn:
+        if piece.color == new_board.turn:
             material_diff += value
         else:
             material_diff -= value
 
 
-def material_count(new_board, turn):
+def material_count(new_board):
     # count material in the new position
     all_pieces = new_board.piece_map().values()
     material_diff = 0
     for piece in all_pieces:
-        value = PIECE_VALUES[piece.symbol().upper()]
-        if piece.color == turn:
+        value = PIECE_VALUES[piece.piece_type]
+        if piece.color == new_board.turn:
             material_diff += value
         else:
             material_diff -= value
@@ -45,20 +46,20 @@ def material_count(new_board, turn):
     return material_diff
 
 
-def improved_score(new_board, turn):
-    score = material_count(new_board, turn)
+def improved_score(new_board):
+    score = material_count(new_board)
 
     # Compute space controlled by current color
     space = 0
     for square in chess.SQUARES:
         piece = new_board.piece_at(square)
-        if piece != None:
-            if new_board.is_attacked_by(turn, square):
-                space += 1 * PIECE_VALUES[piece.symbol().upper()]
-            if new_board.is_attacked_by(not turn, square):
-                space -= 1 * PIECE_VALUES[piece.symbol().upper()]
+        if piece is not None:
+            if new_board.is_attacked_by(new_board.turn, square):
+                space += 100  # * PIECE_VALUES[piece.piece_type]
+            if new_board.is_attacked_by(not new_board.turn, square):
+                space -= 100  # * PIECE_VALUES[piece.piece_type]
 
-    score += space * 1 / 32
+    score += space * 1 / 64
 
     return score
 
@@ -67,84 +68,118 @@ num_pruned = 0
 cache_hits = 0
 positions = 0
 
+Config = namedtuple("Config",
+                    ['prune', 'cache', 'sort', 'max_depth', "sort_heuristic"],
+                    defaults=[True, True, True, 4, material_count])
 
-def minimax_score(board, turn, cutoff=999999999, current_depth=0, max_depth=2, cache={}):
+
+def minimax_score(board, alpha=-999999999, beta=999999999, current_depth=0,
+                  cache=(), config=Config(), sort_heuristic=material_count):
     global cache_hits, num_pruned, positions
     positions += 1
 
-    if current_depth == max_depth or board.is_game_over():  # board.outcome():
-        return improved_score(board, turn)
+    turn = board.turn
+
+    if current_depth == config.max_depth or board.is_game_over():  # board.outcome():
+        return improved_score(board)
 
     # recursively calculate best move
     # Make a list of all legal moves
     moves = list(board.legal_moves)
-
     best_move = None
     best_score = -float('inf')
 
+    children = []
+
     # Loop through each legal move
     for move in moves:
-
         # Copy the board and preform a move on copy of board
         new_board = board.copy()
         new_board.push(move)
 
-        # if new_board.fen() not in cache:
-        #     score = minimax_score(new_board, not turn, -best_score, current_depth + 1, max_depth, cache)
-        #     cache[new_board.fen()] = (score, current_depth)
-        # else:
-        #     #     old_score, old_depth = cache[new_board.fen()]
-        #     #     if old_depth > current_depth:
-        #     #         score = minimax_score(new_board, turn, current_depth + 1, max_depth, cache)
-        #     #         cache[new_board.fen()] = (score, current_depth)
-        #     #     else:
-        #     score, _ = cache[new_board.fen()]
-        #     cache_hits += 1
+        # Sorted score
+        sort_score = sort_heuristic(new_board) if config.sort else 0
+        children.append((sort_score, new_board, move))
 
-        score = minimax_score(new_board, not turn, -best_score, current_depth + 1, max_depth, cache)
+    for _, new_board, move in sorted(children, key=lambda x: x[0], reverse=True):
+
+        if config.cache:
+            key = new_board._transposition_key()
+            score, cached_depth = cache[key] if key in cache else (0, 0)
+
+            # Compute depth of score estimate
+            new_depth = config.max_depth - current_depth
+
+            # If we could get a deeper estimate than what is in the cache
+            if new_depth > cached_depth:
+                score = minimax_score(new_board, -alpha, -beta, current_depth + 1, cache, config, sort_heuristic)
+                cache[key] = (score, new_depth)
+            else:
+                cache_hits += 1
+        else:
+            score = minimax_score(new_board, -alpha, -beta, current_depth + 1, cache, config, sort_heuristic)
 
         if score > best_score:
             best_move = move
             best_score = score
+            alpha = max(best_score, alpha)
 
-        if score > cutoff:
-            num_pruned += 1
-            return -best_score
+        if config.prune:
+            if alpha >= beta:
+                num_pruned += 1
+                return -best_score
 
     # print("Opponent's best move is {}".format(best_move))
     return -best_score
 
 
 class ScoreEngine:
-    def __init__(self, score_function=material_count):
-        self.score_function = minimax_score
+    def __init__(self, score_function=material_count, config=Config()):
+        self.config = config
+        self.score_function = score_function
         self.name = "ScoreEngine"
+        self.known_positions = {}
+
+    def cached_score_difference(self, new_board):
+        key = new_board._transposition_key()
+
+        if key in self.known_positions:
+            score, _ = self.known_positions[key]
+            return score
+        return material_count(new_board)
 
     def play(self, board):
         start_time = time.time()
 
         # Make a list of all legal moves
         moves = list(board.legal_moves)
-
         best_move = None
         best_score = -999999
 
-        known_positions = {}
-
         # Loop through each legal move
         for move in moves:
-
             # Copy the board and preform a move on copy of board
             new_board = board.copy()
             new_board.push(move)
 
-            score = self.score_function(new_board, board.turn, cache=known_positions)
+            if self.score_function == minimax_score:
+                score = self.score_function(new_board,
+                                            cache=self.known_positions,
+                                            config=self.config,
+                                            current_depth=1,
+                                            sort_heuristic=self.cached_score_difference)
+            else:
+                score = self.score_function(new_board)
 
             if score > best_score:
                 best_move = move
                 best_score = score
+
         print("Cache hits: {}. Prunes: {}. Positions: {}.".format(cache_hits, num_pruned, positions))
-        print("Found best move: {} in {} seconds".format(best_move, time.time() - start_time))
+
+        print("Found best move: {} in {} seconds on move {}".format(best_move, time.time() - start_time,
+                                                                    len(board.move_stack)))
+
         # print("Duplicate positions were seen times {}".format(sum(known_positions.values())))
 
         return best_move
