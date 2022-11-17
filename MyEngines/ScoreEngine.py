@@ -1,4 +1,5 @@
 from collections import namedtuple
+from math import inf as INFINITY
 
 import chess
 import time
@@ -28,83 +29,90 @@ def evaluate_count(new_board):
             material_diff -= value
 
 
-def material_count(new_board):
+def material_count(board):
     # count material in the new position
-    all_pieces = new_board.piece_map().values()
+    if board.is_checkmate():
+        return INFINITY
+
+    all_pieces = board.piece_map().values()
     material_diff = 0
     for piece in all_pieces:
         value = PIECE_VALUES[piece.piece_type]
-        if piece.color == new_board.turn:
-            material_diff += value
-        else:
+        if piece.color == board.turn:
             material_diff -= value
-
-    # If there is a checkmate possible increase the  score
-    if new_board.is_checkmate():
-        return 99999999
+        else:
+            material_diff += value
 
     return material_diff
 
 
-def improved_score(new_board):
-    score = material_count(new_board)
+def improved_score(board):
+    score = material_count(board)
 
     # Compute space controlled by current color
     space = 0
     for square in chess.SQUARES:
-        piece = new_board.piece_at(square)
-        if piece is not None:
-            if new_board.is_attacked_by(new_board.turn, square):
-                space += 100  # * PIECE_VALUES[piece.piece_type]
-            if new_board.is_attacked_by(not new_board.turn, square):
-                space -= 100  # * PIECE_VALUES[piece.piece_type]
+        if board.is_attacked_by(board.turn, square):
+            space += 100
+        if board.is_attacked_by(not board.turn, square):
+            space -= 100
 
     score += space * 1 / 64
 
     return score
-
 
 num_pruned = 0
 cache_hits = 0
 positions = 0
 
 Config = namedtuple("Config",
-                    ['prune', 'cache', 'sort', 'max_depth', "sort_heuristic"],
-                    defaults=[True, True, True, 4, material_count])
+                    ['prune', 'cache', 'sort', 'max_depth'],
+                    defaults=[True, True, True, 4])
 
 
-def minimax_score(board, alpha=-999999999, beta=999999999, current_depth=0,
-                  cache=(), config=Config(), sort_heuristic=material_count):
+def minimax_score(board, alpha=-INFINITY, beta=INFINITY, current_depth=0,
+                  cache=(), config=Config(), sort_heuristic=material_count, timelimit=1500000000):
     global cache_hits, num_pruned, positions
     positions += 1
 
+    outcome = board.outcome(claim_draw=False)
+
+    if outcome:
+        if outcome.winner is None:
+            return 0
+        else:
+            return 10000 / current_depth  # prefer shallower checkmates
+
     turn = board.turn
 
-    if current_depth == config.max_depth or board.is_game_over():  # board.outcome():
+    if current_depth == config.max_depth or outcome or board.is_checkmate() or board.is_stalemate():  # or (timelimit and time.time() > timelimit):
         return improved_score(board)
 
-    # recursively calculate best move
     # Make a list of all legal moves
     moves = list(board.legal_moves)
     best_move = None
-    best_score = -float('inf')
+    best_score = -INFINITY
 
     children = []
 
     # Loop through each legal move
     for move in moves:
-        # Copy the board and preform a move on copy of board
-        new_board = board.copy()
-        new_board.push(move)
+        # Make the move in the current position
+        board.push(move)
 
         # Sorted score
-        sort_score = sort_heuristic(new_board) if config.sort else 0
-        children.append((sort_score, new_board, move))
+        sort_score = sort_heuristic(board) if config.sort else 0
 
-    for _, new_board, move in sorted(children, key=lambda x: x[0], reverse=True):
+        # Take the move back
+        board.pop()
+
+        children.append((sort_score, move))
+
+    for _, move in sorted(children, key=lambda x: x[0], reverse=True):
+        board.push(move)
 
         if config.cache:
-            key = new_board._transposition_key()
+            key = board._transposition_key()
             score, cached_depth = cache[key] if key in cache else (0, 0)
 
             # Compute depth of score estimate
@@ -112,12 +120,15 @@ def minimax_score(board, alpha=-999999999, beta=999999999, current_depth=0,
 
             # If we could get a deeper estimate than what is in the cache
             if new_depth > cached_depth:
-                score = minimax_score(new_board, -alpha, -beta, current_depth + 1, cache, config, sort_heuristic)
+                score = minimax_score(board, -alpha, -beta, current_depth + 1, cache, config, sort_heuristic)
+
                 cache[key] = (score, new_depth)
             else:
                 cache_hits += 1
         else:
-            score = minimax_score(new_board, -alpha, -beta, current_depth + 1, cache, config, sort_heuristic)
+            score = minimax_score(board, -alpha, -beta, current_depth + 1, cache, config, sort_heuristic)
+
+        board.pop()
 
         if score > best_score:
             best_move = move
@@ -125,7 +136,7 @@ def minimax_score(board, alpha=-999999999, beta=999999999, current_depth=0,
             alpha = max(best_score, alpha)
 
         if config.prune:
-            if alpha >= beta:
+            if score >= beta:
                 num_pruned += 1
                 return -best_score
 
@@ -136,25 +147,37 @@ def minimax_score(board, alpha=-999999999, beta=999999999, current_depth=0,
 class ScoreEngine:
     def __init__(self, score_function=material_count, config=Config()):
         self.config = config
-        self.score_function = score_function
+        self.score_function = minimax_score
         self.name = "ScoreEngine"
         self.known_positions = {}
+        self.visited_positions = set()
 
-    def cached_score_difference(self, new_board):
-        key = new_board._transposition_key()
+    def store_position(self, board):
+        key = board._transposition_key()
+
+        if key in self.visited_positions:
+            self.known_positions[key] = (0, INFINITY)
+        else:
+            self.visited_positions.add(key)
+
+    def cached_score_difference(self, board):
+        key = board._transposition_key()
 
         if key in self.known_positions:
             score, _ = self.known_positions[key]
             return score
-        return material_count(new_board)
+        return material_count(board)
 
     def play(self, board):
         start_time = time.time()
 
+        self.store_position(board)
+
         # Make a list of all legal moves
         moves = list(board.legal_moves)
+
         best_move = None
-        best_score = -999999
+        best_score = -INFINITY
 
         # Loop through each legal move
         for move in moves:
@@ -166,14 +189,17 @@ class ScoreEngine:
                 score = self.score_function(new_board,
                                             cache=self.known_positions,
                                             config=self.config,
-                                            current_depth=1,
-                                            sort_heuristic=self.cached_score_difference)
+                                            current_depth=1)
             else:
                 score = self.score_function(new_board)
 
             if score > best_score:
                 best_move = move
                 best_score = score
+
+        board.push(best_move)
+        self.store_position(board)
+        board.pop()
 
         print("Cache hits: {}. Prunes: {}. Positions: {}.".format(cache_hits, num_pruned, positions))
 
