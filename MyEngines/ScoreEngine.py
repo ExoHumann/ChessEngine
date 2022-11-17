@@ -31,8 +31,6 @@ def evaluate_count(new_board):
 
 def material_count(board):
     # count material in the new position
-    if board.is_checkmate():
-        return INFINITY
 
     all_pieces = board.piece_map().values()
     material_diff = 0
@@ -67,11 +65,11 @@ positions = 0
 
 Config = namedtuple("Config",
                     ['prune', 'cache', 'sort', 'max_depth'],
-                    defaults=[True, True, True, 4])
+                    defaults=[True, True, True, 15])
 
 
 def minimax_score(board, alpha=-INFINITY, beta=INFINITY, current_depth=0,
-                  cache=(), config=Config(), sort_heuristic=material_count, timelimit=1500000000):
+                  cache=(), config=Config(), sort_heuristic=material_count, timelimit=15000):
     global cache_hits, num_pruned, positions
     positions += 1
 
@@ -111,7 +109,10 @@ def minimax_score(board, alpha=-INFINITY, beta=INFINITY, current_depth=0,
     for _, move in sorted(children, key=lambda x: x[0], reverse=True):
         board.push(move)
 
-        if config.cache:
+        if timelimit and time.time() > timelimit:
+            score = sort_heuristic(board)
+        elif config.cache:
+
             key = board._transposition_key()
             score, cached_depth = cache[key] if key in cache else (0, 0)
 
@@ -145,9 +146,9 @@ def minimax_score(board, alpha=-INFINITY, beta=INFINITY, current_depth=0,
 
 
 class ScoreEngine:
-    def __init__(self, score_function=material_count, config=Config()):
+    def __init__(self, score_function=minimax_score, config=Config()):
         self.config = config
-        self.score_function = minimax_score
+        self.score_function = score_function
         self.name = "ScoreEngine"
         self.known_positions = {}
         self.visited_positions = set()
@@ -168,7 +169,13 @@ class ScoreEngine:
             return score
         return material_count(board)
 
-    def play(self, board):
+    def play(self, board, time_limit = 15000):
+
+        timelimit = None
+        if isinstance(timelimit, int):
+            print("Using time management logic")
+            target_time = time_limit / 1000
+            timelimit = time.time() + target_time
         start_time = time.time()
 
         self.store_position(board)
@@ -176,30 +183,39 @@ class ScoreEngine:
         # Make a list of all legal moves
         moves = list(board.legal_moves)
 
-        best_move = None
-        best_score = -INFINITY
-
         # Loop through each legal move
-        for move in moves:
-            # Copy the board and preform a move on copy of board
-            new_board = board.copy()
-            new_board.push(move)
+        for depth in range(1, self.config.max_depth + 1):
+            # print("Trying depth {}".format(depth))
 
-            if self.score_function == minimax_score:
-                score = self.score_function(new_board,
-                                            cache=self.known_positions,
-                                            config=self.config,
-                                            current_depth=1)
-            else:
-                score = self.score_function(new_board)
+            new_config = Config(self.config.prune,
+                                self.config.cache,
+                                self.config.sort,
+                                depth)
+            best_move = None
+            best_score = -INFINITY
 
-            if score > best_score:
-                best_move = move
-                best_score = score
+            for move in moves:
+                # Copy the board and preform a move on copy of board
+                new_board = board.copy()
+                new_board.push(move)
 
-        board.push(best_move)
-        self.store_position(board)
-        board.pop()
+                score = self.score_function(new_board, cache=self.known_positions,
+                                            config=new_config, current_depth=1,
+                                            sort_heuristic=self.cached_score_difference, timelimit=timelimit)
+
+                if score > best_score:
+                    best_move = move
+                    best_score = score
+
+            print("Trying depth {} with best move {}".format(depth,best_move))
+
+            if timelimit and time.time() > timelimit:
+                print("Ran out of time at depth {}".format(depth))
+                break
+
+            board.push(best_move)
+            self.store_position(board)
+            board.pop()
 
         print("Cache hits: {}. Prunes: {}. Positions: {}.".format(cache_hits, num_pruned, positions))
 
