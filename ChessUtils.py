@@ -8,7 +8,7 @@ def play_game(board, white_player, black_player, display, last_move=None):
 
     while not board.is_game_over():
         player = white_player if board.turn == chess.WHITE else black_player
-        move = player.play(board)
+        move = player.play(board, 15000, True)
         print(player.name + " is taking a trun")
         board.push(move)
         display(board)
